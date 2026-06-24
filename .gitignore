@@ -1,5 +1,4 @@
-# Ignore router implementation
-roteador.py
+
 
 # Ignore test logs and test script
 exemplo/log.teste.*
