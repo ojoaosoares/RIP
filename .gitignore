@@ -3,3 +3,4 @@
 # Ignore test logs and test script
 exemplo/log.teste.*
 exemplo/run_test.sh
+*log*

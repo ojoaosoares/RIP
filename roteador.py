@@ -31,7 +31,7 @@ def extrai_endereco(msg):
     return r[0].decode('utf-8', errors='replace'), r[1]
 
 def extrai_destino_texto(msg):
-    l = struct.unpack(">32s64s", msg)
+    l = struct.unpack("!32s64s", msg)
     destino = l[0].decode('utf-8', errors='replace')
     texto   = l[1].decode('utf-8', errors='replace')
     return destino, texto
@@ -59,11 +59,10 @@ def montar_mensagem_vetor(viz_name):
             
     N = len(entradas)
     msg = b'V'
-    msg += nome_proprio.encode('utf-8').ljust(32, b'\x00')
+    msg += struct.pack('!32s', nome_proprio.encode('utf-8'))
     msg += struct.pack('!H', N)
     for dest, dist in entradas:
-        msg += dest.encode('utf-8').ljust(32, b'\x00')
-        msg += struct.pack('!B', dist)
+        msg += struct.pack('!32sB', dest.encode('utf-8'), dist)
     return msg
 
 # Desmonta a mensagem do protocolo RC_RIP ('V') recebida de um vizinho
@@ -86,8 +85,7 @@ def desmontar_mensagem_texto(sock):
 # Envia mensagem de texto ('M')
 def enviar_mensagem_texto(sock, destino, texto):
     msg = b'M'
-    msg += destino.encode('utf-8').ljust(32, b'\x00')
-    msg += texto.encode('utf-8').ljust(64, b'\x00')
+    msg += struct.pack('!32s64s', destino.encode('utf-8'), texto.encode('utf-8'))
     sock.sendall(msg)
 
 # Anuncia o vetor para todos os vizinhos
@@ -186,38 +184,39 @@ def processar_comando_controle(comando, sock):
         host, porto = extrai_endereco(msg)
         host_limpo = host.rstrip('\x00')
         
+        nsock = None
         try:
             nsock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             nsock.connect((host_limpo, porto))
             # Handshake inicial
-            nsock.sendall(nome_proprio.encode('utf-8').ljust(32, b'\x00'))
+            nsock.sendall(struct.pack('!32s', nome_proprio.encode('utf-8')))
             viz_name = receber_bytes(nsock, 32).decode('utf-8', errors='replace').rstrip('\x00')
             
             with tabela_lock:
                 vizinhos[viz_name] = nsock
                 tabela[viz_name] = {'nexthop': viz_name, 'dist': 1}
                 
-            print(f"C {host_limpo} {porto}", flush=True)
             anunciar_vetor_para_todos()
         except Exception:
-            pass
+            if nsock:
+                try:
+                    nsock.close()
+                except Exception:
+                    pass
             
     elif comando == 'D':
         msg = receber_bytes(sock, 32)
         roteador = extrai_roteador(msg)
         roteador_limpo = roteador.rstrip('\x00')
-        print(f"D {roteador_limpo}", flush=True)
         fechar_vizinho(roteador_limpo)
         
     elif comando == 'T':
-        print("T", flush=True)
         with tabela_lock:
             for dest in sorted(tabela.keys()):
                 info = tabela[dest]
                 print(f"T {dest} {info['dist']} {info['nexthop']}", flush=True)
                 
     elif comando == 'I':
-        print("I", flush=True)
         cmd_inicio()
         
     elif comando == 'E':
@@ -272,10 +271,11 @@ def main():
         
         for s in legiveis:
             if s == server_socket:
+                client_sock = None
                 try:
                     client_sock, addr = server_socket.accept()
                     sender_name = receber_bytes(client_sock, 32).decode('utf-8', errors='replace').rstrip('\x00')
-                    client_sock.sendall(nome_proprio.encode('utf-8').ljust(32, b'\x00'))
+                    client_sock.sendall(struct.pack('!32s', nome_proprio.encode('utf-8')))
                     
                     with tabela_lock:
                         vizinhos[sender_name] = client_sock
@@ -284,7 +284,11 @@ def main():
                     anunciar_vetor_para_um(sender_name)
                     anunciar_vetor_para_todos()
                 except Exception:
-                    pass
+                    if client_sock:
+                        try:
+                            client_sock.close()
+                        except Exception:
+                            pass
                     
             elif s == control:
                 try:

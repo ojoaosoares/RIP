@@ -1,0 +1,25 @@
+I
+P 2
+A vulcan risa
+A risa kronos
+P 5
+T vulcan
+T risa
+T kronos
+P 1
+E vulcan kronos Hello!
+P 2
+R risa kronos
+P 5
+T vulcan
+T risa
+T kronos
+P 1
+A vulcan kronos
+P 5
+T vulcan
+T risa
+T kronos
+P 1
+E vulcan kronos Hello_again!
+P 2
